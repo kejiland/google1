@@ -1,118 +1,34 @@
-name: Daily Node Filter
+name: Node Filter
 
 on:
-  workflow_dispatch:  # 手动触发
+  workflow_dispatch:
   schedule:
-    # 每天北京时间 8:00 执行（UTC 0:00）
     - cron: '0 0 * * *'
 
-permissions:
-  contents: write
-
 jobs:
-  filter-nodes:
+  filter:
     runs-on: ubuntu-latest
     
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      
+    - uses: actions/checkout@v4
+    
     - name: Setup Python
       uses: actions/setup-python@v5
       with:
         python-version: '3.10'
-        
-    - name: Install dependencies
+    
+    - name: Install requests
       run: pip install requests
-      
-    - name: Run filter script
-      id: filter-step
+    
+    - name: Run filter
+      run: python filter_nodes.py
+    
+    - name: Commit and push
       run: |
-        echo "开始执行节点过滤脚本..."
-        echo "当前时间: $(date)"
-        
-        python filter_nodes.py
-        FILTER_EXIT_CODE=$?
-        
-        echo "Python脚本退出码: $FILTER_EXIT_CODE"
-        
-        if [ -f "kejiland.txt" ]; then
-          echo "文件已生成: kejiland.txt"
-          echo "file_exists=true" >> $GITHUB_OUTPUT
-        else
-          echo "文件未生成"
-          echo "file_exists=false" >> $GITHUB_OUTPUT
-        fi
-        
-        exit $FILTER_EXIT_CODE
-        
-    - name: Show result details
-      if: steps.filter-step.outputs.file_exists == 'true'
-      run: |
-        echo "=== 过滤结果详情 ==="
-        echo ""
-        echo "文件信息:"
-        echo "- 大小: $(wc -c < kejiland.txt) 字节"
-        echo "- 行数: $(wc -l < kejiland.txt)"
-        echo ""
-        echo "节点协议统计:"
-        echo "ss节点: $(grep -c -i '^ss[=:]' kejiland.txt 2>/dev/null || echo 0)"
-        echo "vmess节点: $(grep -c -i '^vmess[=:]' kejiland.txt 2>/dev/null || echo 0)"
-        echo "vless节点: $(grep -c -i '^vless[=:]' kejiland.txt 2>/dev/null || echo 0)"
-        echo "trojan节点: $(grep -c -i '^trojan[=:]' kejiland.txt 2>/dev/null || echo 0)"
-        echo ""
-        echo "验证结果:"
-        echo "http=节点: $(grep -c -i '^http=' kejiland.txt 2>/dev/null || echo 0)"
-        echo "https=节点: $(grep -c -i '^https=' kejiland.txt 2>/dev/null || echo 0)"
-        echo "socks5=节点: $(grep -c -i '^socks5=' kejiland.txt 2>/dev/null || echo 0)"
-        echo ""
-        echo "前5行内容:"
-        echo "----------------------------------------"
-        head -5 kejiland.txt
-        echo "----------------------------------------"
-        
-    - name: Commit changes
-      if: steps.filter-step.outputs.file_exists == 'true'
-      run: |
-        git config --global user.name "GitHub Actions"
-        git config --global user.email "actions@github.com"
-        
+        git config user.name "GitHub Actions"
+        git config user.email "actions@github.com"
         git add kejiland.txt
-        
-        if git diff --cached --quiet; then
-          echo "没有变化需要提交"
-        else
-          LINES=$(wc -l < kejiland.txt)
-          SIZE=$(wc -c < kejiland.txt)
-          
-          SS_COUNT=$(grep -c -i '^ss[=:]' kejiland.txt 2>/dev/null || echo 0)
-          VMESS_COUNT=$(grep -c -i '^vmess[=:]' kejiland.txt 2>/dev/null || echo 0)
-          TROJAN_COUNT=$(grep -c -i '^trojan[=:]' kejiland.txt 2>/dev/null || echo 0)
-          
-          git commit -m "🔄 更新节点列表 [$(date +'%Y-%m-%d %H:%M')]
-
-📊 统计信息:
-- 总节点数: $LINES
-- 文件大小: $SIZE 字节
-- SS节点: $SS_COUNT
-- Vmess节点: $VMESS_COUNT
-- Trojan节点: $TROJAN_COUNT
-
-🤖 自动更新"
-          
+        if ! git diff --cached --quiet; then
+          git commit -m "更新节点 $(date +'%Y-%m-%d')"
           git push
-          echo "✅ 更改已提交"
-        fi
-        
-    - name: View log
-      if: always()
-      run: |
-        if [ -f "filter.log" ]; then
-          echo "=== 执行日志 ==="
-          echo "最后10行日志:"
-          echo "----------------------------------------"
-          tail -10 filter.log
-          echo "----------------------------------------"
-        else
-          echo "没有日志文件"
         fi
