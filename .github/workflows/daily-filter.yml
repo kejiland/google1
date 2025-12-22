@@ -1,10 +1,11 @@
-name: Daily Node Filter
+name: Node Filter Bot
 
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 0 * * *'
+    - cron: '0 0 * * *'  # UTC 0:00 = 北京时间 8:00
 
+# 关键权限配置
 permissions:
   contents: write
 
@@ -13,96 +14,47 @@ jobs:
     runs-on: ubuntu-latest
     
     steps:
-    - name: Checkout code
+    - name: Checkout repository
       uses: actions/checkout@v4
+      # 不需要指定 token，使用默认的 GITHUB_TOKEN
       
     - name: Setup Python
       uses: actions/setup-python@v5
       with:
         python-version: '3.10'
         
-    - name: Install requests
+    - name: Install dependencies
       run: pip install requests
       
-    - name: Run filter script
+    - name: Run node filter
       run: |
         echo "开始执行节点过滤..."
+        echo "时间: $(date '+%Y-%m-%d %H:%M:%S')"
         python filter_nodes.py
         
-    - name: Show result summary
+    - name: Commit results
       run: |
-        echo "=== 过滤结果摘要 ==="
-        echo ""
+        # 配置 Git 用户（使用 GitHub Actions 的官方身份）
+        git config --global user.name "github-actions[bot]"
+        git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
         
-        if [ -f kejiland.txt ]; then
-          echo "✅ 文件已生成: kejiland.txt"
-          echo ""
-          echo "📊 文件信息:"
-          echo "- 大小: $(wc -c < kejiland.txt) 字节"
-          echo "- 行数: $(wc -l < kejiland.txt)"
-          echo ""
-          echo "🔍 节点格式统计:"
-          echo "ss://: $(grep -c -i '^ss://' kejiland.txt 2>/dev/null || echo 0)"
-          echo "vmess://: $(grep -c -i '^vmess://' kejiland.txt 2>/dev/null || echo 0)"
-          echo "vless://: $(grep -c -i '^vless://' kejiland.txt 2>/dev/null || echo 0)"
-          echo "trojan://: $(grep -c -i '^trojan://' kejiland.txt 2>/dev/null || echo 0)"
-          echo "ssr://: $(grep -c -i '^ssr://' kejiland.txt 2>/dev/null || echo 0)"
-          echo ""
-          echo "✅ 验证结果:"
-          echo "http=: $(grep -c -i '^http=' kejiland.txt 2>/dev/null || echo 0)"
-          echo "https=: $(grep -c -i '^https=' kejiland.txt 2>/dev/null || echo 0)"
-          echo "socks5=: $(grep -c -i '^socks5=' kejiland.txt 2>/dev/null || echo 0)"
-          echo ""
-          echo "📝 内容示例 (前3行):"
-          head -3 kejiland.txt
-        else
-          echo "❌ 文件未生成"
-        fi
-        
-    - name: Commit and push
-      run: |
-        git config --global user.name "GitHub Actions"
-        git config --global user.email "actions@github.com"
-        
+        # 检查文件是否存在
         if [ ! -f kejiland.txt ]; then
-          echo "错误：kejiland.txt 不存在"
+          echo "错误：kejiland.txt 未生成"
           exit 1
         fi
         
+        # 添加文件
         git add kejiland.txt
         
+        # 检查是否有变化
         if git diff --cached --quiet; then
-          echo "没有变化需要提交"
+          echo "没有新变化"
         else
-          # 获取文件信息
-          LINES=$(wc -l < kejiland.txt)
+          # 提交
+          git commit -m "🔁 自动更新节点列表 [$(date +'%Y-%m-%d %H:%M')]"
           
-          # 获取节点类型统计
-          SS_COUNT=$(grep -c -i '^ss://' kejiland.txt 2>/dev/null || echo 0)
-          VMESS_COUNT=$(grep -c -i '^vmess://' kejiland.txt 2>/dev/null || echo 0)
-          VLESS_COUNT=$(grep -c -i '^vless://' kejiland.txt 2>/dev/null || echo 0)
-          TROJAN_COUNT=$(grep -c -i '^trojan://' kejiland.txt 2>/dev/null || echo 0)
-          SSR_COUNT=$(grep -c -i '^ssr://' kejiland.txt 2>/dev/null || echo 0)
-          
-          # 提交信息
-          COMMIT_MSG="🔄 自动更新节点列表 [$(date +'%Y-%m-%d %H:%M')]
-
-📊 节点统计:
-- 总节点数: $LINES
-
-🎯 节点类型:
-- SS: $SS_COUNT
-- Vmess: $VMESS_COUNT
-- Vless: $VLESS_COUNT
-- Trojan: $TROJAN_COUNT
-- SSR: $SSR_COUNT
-
-✅ 已移除所有 http=/https=/socks5= 节点
-
-🤖 由 GitHub Actions 自动生成"
-          
-          git commit -m "$COMMIT_MSG"
+          # 推送
           git push
-          
-          echo "✅ 更改已提交"
+          echo "✅ 更新完成"
         fi
