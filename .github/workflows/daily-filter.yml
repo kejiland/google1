@@ -1,0 +1,149 @@
+name: Daily Node Filter
+
+on:
+  workflow_dispatch:  # 手动触发
+  schedule:
+    # 每天北京时间 8:00 执行（UTC 0:00）
+    - cron: '0 0 * * *'
+
+permissions:
+  contents: write
+
+jobs:
+  filter-nodes:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 📥 检出代码
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        
+    - name: 🐍 设置 Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+        
+    - name: 📦 安装依赖
+      run: |
+        pip install requests
+        
+    - name: 🚀 执行过滤脚本
+      id: filter
+      run: |
+        echo "=== 开始执行节点过滤 ==="
+        echo "执行时间: $(date '+%Y-%m-%d %H:%M:%S')"
+        echo ""
+        
+        # 执行 Python 脚本
+        python filter_nodes.py
+        FILTER_EXIT_CODE=$?
+        
+        echo ""
+        echo "过滤脚本退出码: $FILTER_EXIT_CODE"
+        
+        # 检查输出文件
+        if [ -f "kejiland.txt" ]; then
+          echo "✅ kejiland.txt 已生成"
+          echo "::set-output name=file_generated::true"
+        else
+          echo "❌ kejiland.txt 未生成"
+          echo "::set-output name=file_generated::false"
+        fi
+        
+        exit $FILTER_EXIT_CODE
+        
+    - name: 📊 显示过滤结果详情
+      if: steps.filter.outputs.file_generated == 'true'
+      run: |
+        echo "=== 过滤结果详情 ==="
+        
+        # 显示文件基本信息
+        echo "📁 文件信息:"
+        echo "- 大小: $(wc -c < kejiland.txt) 字节"
+        echo "- 行数: $(wc -l < kejiland.txt)"
+        
+        echo ""
+        echo "📋 内容预览:"
+        echo "----------------------------------------"
+        
+        # 显示各种协议的节点数量
+        echo "🔍 节点协议统计:"
+        echo "ss 节点: $(grep -c -i '^ss[=:]' kejiland.txt 2>/dev/null || echo 0)"
+        echo "vmess 节点: $(grep -c -i '^vmess[=:]' kejiland.txt 2>/dev/null || echo 0)"
+        echo "vless 节点: $(grep -c -i '^vless[=:]' kejiland.txt 2>/dev/null || echo 0)"
+        echo "trojan 节点: $(grep -c -i '^trojan[=:]' kejiland.txt 2>/dev/null || echo 0)"
+        
+        echo ""
+        echo "✅ 验证无 HTTP/SOCKS5:"
+        echo "http=: $(grep -c -i '^http=' kejiland.txt 2>/dev/null || echo 0)"
+        echo "https=: $(grep -c -i '^https=' kejiland.txt 2>/dev/null || echo 0)"
+        echo "socks5=: $(grep -c -i '^socks5=' kejiland.txt 2>/dev/null || echo 0)"
+        
+        echo ""
+        echo "📝 前5行内容:"
+        head -5 kejiland.txt
+        echo "----------------------------------------"
+        
+    - name: 📝 提交更改
+      if: steps.filter.outputs.file_generated == 'true'
+      run: |
+        # 配置 Git 用户
+        git config --global user.name "GitHub Actions Bot"
+        git config --global user.email "actions@github.com"
+        
+        # 添加要提交的文件
+        git add kejiland.txt
+        
+        # 检查是否有更改
+        if git diff --cached --quiet; then
+          echo "📌 kejiland.txt 无变化，跳过提交"
+        else
+          echo "📤 检测到更改，准备提交..."
+          
+          # 获取文件统计信息
+          LINE_COUNT=$(wc -l < kejiland.txt)
+          FILE_SIZE=$(wc -c < kejiland.txt)
+          
+          # 获取节点类型统计
+          SS_COUNT=$(grep -c -i '^ss[=:]' kejiland.txt 2>/dev/null || echo 0)
+          VMESS_COUNT=$(grep -c -i '^vmess[=:]' kejiland.txt 2>/dev/null || echo 0)
+          TROJAN_COUNT=$(grep -c -i '^trojan[=:]' kejiland.txt 2>/dev/null || echo 0)
+          
+          # 创建详细的提交信息
+          COMMIT_MSG="🔄 自动更新节点列表 [$(date +'%Y-%m-%d %H:%M')]
+
+📊 节点统计:
+- 总节点数: ${LINE_COUNT}
+- 文件大小: ${FILE_SIZE} 字节
+
+🎯 节点类型:
+- SS: ${SS_COUNT}
+- Vmess: ${VMESS_COUNT}
+- Trojan: ${TROJAN_COUNT}
+
+🤖 由 GitHub Actions 自动生成
+📅 执行时间: $(date)"
+
+          # 提交并推送
+          git commit -m "${COMMIT_MSG}"
+          git push
+          
+          echo "✅ 更改已提交并推送"
+        fi
+        
+    - name: 📋 查看日志
+      if: always()
+      run: |
+        echo "=== 执行日志 ==="
+        if [ -f "filter.log" ]; then
+          echo "📄 filter.log 最后20行:"
+          echo "----------------------------------------"
+          tail -20 filter.log
+          echo "----------------------------------------"
+          
+          # 添加日志文件（可选）
+          git add filter.log 2>/dev/null || true
+        else
+          echo "📝 无日志文件"
+        fi
