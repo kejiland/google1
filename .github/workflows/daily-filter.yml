@@ -44,11 +44,12 @@ jobs:
         
         # 检查输出文件
         if [ -f "kejiland.txt" ]; then
+          echo "kejiland.txt 已生成" >> $GITHUB_STEP_SUMMARY
           echo "✅ kejiland.txt 已生成"
-          echo "::set-output name=file_generated::true"
+          echo "file_generated=true" >> $GITHUB_OUTPUT
         else
           echo "❌ kejiland.txt 未生成"
-          echo "::set-output name=file_generated::false"
+          echo "file_generated=false" >> $GITHUB_OUTPUT
         fi
         
         exit $FILTER_EXIT_CODE
